@@ -32,7 +32,10 @@ import (
 	"github.com/solo-io/gloo/projects/gloo/pkg/defaults"
 )
 
-const tracingCollectorPort = 9411
+const (
+	tracingCollectorPort         = 9411
+	tracingCollectorUpstreamName = "tracing-collector"
+)
 
 var _ = Describe("Tracing config loading", func() {
 
@@ -128,7 +131,7 @@ var _ = Describe("Tracing config loading", func() {
 			// create tracing collector upstream
 			tracingCollectorUs := &gloov1.Upstream{
 				Metadata: &core.Metadata{
-					Name:      "tracing-collector",
+					Name:      tracingCollectorUpstreamName,
 					Namespace: writeNamespace,
 				},
 				UpstreamType: &gloov1.Upstream_Static{
@@ -205,14 +208,13 @@ var _ = Describe("Tracing config loading", func() {
 			// That is because each test uses its own InMemoryCache
 		})
 
-		Context("opentelemetry provider", func() {
+		FContext("opentelemetry provider", func() {
 
 			BeforeEach(func() {
 				collectionURLPath = "/opentelemetry.proto.collector.trace.v1.TraceService/Export"
 			})
 
 			It("should send trace msgs with valid opentelemetry provider (collector_ref)", func() {
-				collectionURLPath = "/opentelemetry.proto.collector.trace.v1.TraceService/Export"
 				err := gloohelpers.PatchResource(
 					ctx,
 					&core.ResourceRef{
@@ -228,7 +230,7 @@ var _ = Describe("Tracing config loading", func() {
 										OpenTelemetryConfig: &envoytrace_gloo.OpenTelemetryConfig{
 											CollectorCluster: &envoytrace_gloo.OpenTelemetryConfig_CollectorUpstreamRef{
 												CollectorUpstreamRef: &core.ResourceRef{
-													Name:      "zipkin", // not really zipkin, just an echo server
+													Name:      tracingCollectorUpstreamName,
 													Namespace: writeNamespace,
 												},
 											},
@@ -246,7 +248,7 @@ var _ = Describe("Tracing config loading", func() {
 				Eventually(func(g Gomega) {
 					g.Eventually(testRequest).Should(BeEmpty())
 					g.Eventually(collectorApiHit).Should(Receive())
-				}, time.Second*10, time.Second, "zipkin server should receive trace request").Should(Succeed())
+				}, time.Second*10, time.Second, "tracing server should receive trace request").Should(Succeed())
 			})
 
 		})
@@ -299,7 +301,7 @@ var _ = Describe("Tracing config loading", func() {
 										ZipkinConfig: &envoytrace_gloo.ZipkinConfig{
 											CollectorCluster: &envoytrace_gloo.ZipkinConfig_CollectorUpstreamRef{
 												CollectorUpstreamRef: &core.ResourceRef{
-													Name:      "zipkin", // matches the name of the zipkin upstream we created in the BeforeEach
+													Name:      tracingCollectorUpstreamName,
 													Namespace: writeNamespace,
 												},
 											},
@@ -319,7 +321,7 @@ var _ = Describe("Tracing config loading", func() {
 				Eventually(func(g Gomega) {
 					g.Eventually(testRequest).Should(BeEmpty())
 					g.Eventually(collectorApiHit).Should(Receive())
-				}, time.Second*10, time.Second, "zipkin server should receive trace request").Should(Succeed())
+				}, time.Second*10, time.Second, "tracing server should receive trace request").Should(Succeed())
 			})
 
 			It("should send trace msgs with valid zipkin provider (cluster_name)", func() {
