@@ -18,7 +18,9 @@ services:
     entrypoint: ["envoy"]
     command: ["-c", "/config/envoy.yaml", "--disable-hot-restart"]
     volumes:
-    - ./data/envoy-config.yaml:/config/envoy.yaml:ro
+    # We add the data directory to the .gitignore, otherwise everytime we run this locally, we will check in
+    # updates to the repository. As a result, we need to use the source_data folder as a source for the volume.
+    - ./source_data/envoy-config.yaml:/config/envoy.yaml:ro
     ports:
     - "8080:8080"
     - "8443:8443"
