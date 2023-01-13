@@ -128,6 +128,8 @@ message Settings {
         }
     }
 
+    // Login to Vault with AWS
+    // For more info see https://developer.hashicorp.com/vault/docs/auth/aws
     message VaultAwsAuth {
         oneof login_method {
             VaultAwsIam iam = 1;
