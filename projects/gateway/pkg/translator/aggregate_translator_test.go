@@ -2,6 +2,8 @@ package translator_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,7 +18,7 @@ import (
 	"github.com/solo-io/solo-kit/pkg/api/v2/reporter"
 )
 
-var _ = Describe("Aggregate translator", func() {
+var _ = FDescribe("Aggregate translator", func() {
 	var (
 		ctx = context.TODO()
 
@@ -61,6 +63,9 @@ var _ = Describe("Aggregate translator", func() {
 			Namespace: ns,
 		}, &core.ResourceRef{
 			Name:      "ssl-vs-4",
+			Namespace: ns,
+		}, &core.ResourceRef{
+			Name:      "ssl-vs-5-empty",
 			Namespace: ns,
 		})
 		snap.Gateways = v1.GatewayList{gw1}
@@ -130,22 +135,48 @@ var _ = Describe("Aggregate translator", func() {
 				Name:      "ssl-vs-4",
 				Namespace: ns,
 			},
-		})
+		},
+			&v1.VirtualService{
+				VirtualHost: &v1.VirtualHost{},
+				SslConfig: &gloov1.SslConfig{
+					SniDomains: []string{},
+					// We have to add some other config since we merge configs where the only
+					// difference is the SniDomains
+					TransportSocketConnectTimeout: &durationpb.Duration{Seconds: 5},
+				},
+				DisplayName: "ssl-vs-5-empty",
+				Metadata: &core.Metadata{
+					Name:      "ssl-vs-5-empty",
+					Namespace: ns,
+				},
+			})
 		genProxyWithIsolatedVirtualHosts()
 		proxyName := proxy.Metadata.Name
 		aggregateTranslator := &AggregateTranslator{VirtualServiceTranslator: &VirtualServiceTranslator{}}
+
+		firstSNIOrError := func(chain *gloov1.AggregateListener_HttpFilterChain) (sni string, err error) {
+			sniDomains := chain.GetMatcher().GetSslConfig().GetSniDomains()
+			if len(sniDomains) == 0 {
+				return "", errors.New("no sni domains")
+			}
+			return sniDomains[0], nil
+		}
 		// run 100 times to ensure idempotency
 		// not sure if 100 times is valid; in anecdotal testing it tended to fail in under 20
 		for i := 0; i < 100; i++ {
 			l := aggregateTranslator.ComputeListener(NewTranslatorParams(ctx, snap, reports), proxyName, snap.Gateways[0])
 			Expect(l).NotTo(BeNil())
 			Expect(l.GetAggregateListener())
+			Expect(l.GetAggregateListener().HttpFilterChains).To(HaveLen(6), fmt.Sprintf("output filterchains %v", l.GetAggregateListener().HttpFilterChains))
 			// since we sort on hashes, this is the ordered output of this config
-			Expect(l.GetAggregateListener().HttpFilterChains[0].GetMatcher().GetSslConfig().GetSniDomains()[0]).To(Equal("sni-1"))
-			Expect(l.GetAggregateListener().HttpFilterChains[1].GetMatcher().GetSslConfig().GetSniDomains()[0]).To(Equal("sni-4"))
-			Expect(l.GetAggregateListener().HttpFilterChains[2].GetMatcher().GetSslConfig().GetSniDomains()[0]).To(Equal("sni-3"))
-			Expect(l.GetAggregateListener().HttpFilterChains[3].GetMatcher().GetSslConfig().GetSniDomains()[0]).To(Equal("sni-0"))
-			Expect(l.GetAggregateListener().HttpFilterChains[4].GetMatcher().GetSslConfig().GetSniDomains()[0]).To(Equal("sni-2"))
+			Expect(firstSNIOrError(l.GetAggregateListener().HttpFilterChains[0])).To(Equal("sni-1"))
+			Expect(firstSNIOrError(l.GetAggregateListener().HttpFilterChains[1])).To(Equal("sni-4"))
+			_, err := firstSNIOrError(l.GetAggregateListener().HttpFilterChains[2])
+			Expect(err).To(HaveOccurred(), fmt.Sprintf("should have had no snidomain and error, output filterchains %v", l.GetAggregateListener().HttpFilterChains))
+
+			Expect(firstSNIOrError(l.GetAggregateListener().HttpFilterChains[3])).To(Equal("sni-3"))
+			Expect(firstSNIOrError(l.GetAggregateListener().HttpFilterChains[4])).To(Equal("sni-0"))
+			Expect(firstSNIOrError(l.GetAggregateListener().HttpFilterChains[5])).To(Equal("sni-2"))
 		}
 	})
 })
