@@ -35,12 +35,10 @@ def contains_jwt(lines):
             try:
                 # python's base64 decoder fails if padding is missing; but does not fail if there's
                 # extra padding; so always add padding
-                utfOut = base64.urlsafe_b64decode(token+'==').decode("utf-8")
-                match = jwtPattern.search(utfOut)
-                if match:
-                    print("Probable JWT found in commit: " + token + " gets decoded into: " + utfOut)
+                utfOut = base64.urlsafe_b64decode(f'{token}==').decode("utf-8")
+                if match := jwtPattern.search(utfOut):
+                    print(f"Probable JWT found in commit: {token} gets decoded into: {utfOut}")
                     raiseIssue = True
-            # be very specific about the exceptions we ignore:
             except (UnicodeDecodeError, binascii.Error) as e:
                 continue
     return raiseIssue
@@ -70,7 +68,7 @@ def main():
             elif failCount == 1:
                 prompt = "That's still neither a 'y' nor an 'n'. Do you wish to proceed with this commit?: "
             else:
-                prompt = "You've entered an incorrect input " + str(failCount) + " times now. Please respond with 'y' or 'n' (sans apostrophes) regarding whether or not you wish to proceed with this commit which possibly contains a JWT: "
+                prompt = f"You've entered an incorrect input {str(failCount)} times now. Please respond with 'y' or 'n' (sans apostrophes) regarding whether or not you wish to proceed with this commit which possibly contains a JWT: "
             failCount += 1
     else:
         print("No likely JWTs found, proceeding with commit")
